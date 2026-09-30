@@ -11,7 +11,8 @@ interface WeekRange {
 }
 
 function labelForDate(date: string, index: number): string {
-  const parsed = new Date(date);
+  // Date-only strings parse as UTC; anchor to local midnight so the weekday is right.
+  const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T00:00:00` : date);
   if (Number.isNaN(parsed.getTime())) return index === 0 ? 'Today' : date;
   return new Intl.DateTimeFormat([], { weekday: 'short' }).format(parsed);
 }

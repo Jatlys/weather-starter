@@ -113,6 +113,7 @@ interface TwentyFourHourPayload {
       periods?: Array<{
         timePeriod?: {
           start?: string;
+          end?: string;
           text?: string;
         };
         regions?: Record<string, { text?: string; code?: string }>;
@@ -191,6 +192,8 @@ export class SingaporeWeatherClient {
       windDirection,
       uv,
       airQuality,
+      twentyFourHour,
+      fourDay,
     ] = await Promise.all([
       this.fetchLatestForecastPayload().catch(() => null),
       this.fetchNearestReading('air-temperature', latitude, longitude).catch(() => emptyReading),
@@ -200,6 +203,13 @@ export class SingaporeWeatherClient {
       this.fetchNearestReading('wind-direction', latitude, longitude).catch(() => emptyReading),
       this.fetchUvIndex().catch(() => emptyReading),
       this.fetchAirQuality(latitude, longitude),
+      this.fetchTwentyFourHourForecast(latitude, longitude).catch(() => ({
+        low: null,
+        high: null,
+        periods: [],
+        timestamp: null,
+      })),
+      this.fetchFourDayForecast().catch(() => ({ days: [], timestamp: null })),
     ]);
 
     const snapshot = forecastPayload
@@ -217,6 +227,8 @@ export class SingaporeWeatherClient {
           windDirection.timestamp,
           uv.timestamp,
           airQuality.timestamp,
+          twentyFourHour.timestamp,
+          fourDay.timestamp,
         ]) ||
         '',
       temperature_c: temperature.value,
@@ -228,6 +240,10 @@ export class SingaporeWeatherClient {
       psi_twenty_four_hourly: airQuality.psi,
       pm25_one_hourly: airQuality.pm25,
       air_quality_region: airQuality.region,
+      forecast_low_c: twentyFourHour.low,
+      forecast_high_c: twentyFourHour.high,
+      forecast_periods: twentyFourHour.periods,
+      daily_forecast: fourDay.days,
     };
   }
 
@@ -360,7 +376,7 @@ export class SingaporeWeatherClient {
       high: numberOrNull(record?.general?.temperature?.high),
       periods: (record?.periods ?? [])
         .map((period) => ({
-          label: period.timePeriod?.text ?? '',
+          label: periodLabel(period.timePeriod),
           forecast: period.regions?.[region]?.text ?? period.regions?.central?.text ?? '',
         }))
         .filter((period) => period.label && period.forecast),
@@ -597,6 +613,30 @@ function latestTimestamp(timestamps: Array<string | null>): string | null {
       .filter((timestamp): timestamp is string => Boolean(timestamp))
       .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null
   );
+}
+
+const singaporeTime = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Singapore',
+  hour: 'numeric',
+  day: 'numeric',
+  month: 'short',
+});
+
+// The API's timePeriod.text can disagree with start/end, so prefer the timestamps.
+function periodLabel(timePeriod?: { start?: string; end?: string; text?: string }): string {
+  const start = new Date(timePeriod?.start ?? '');
+  const end = new Date(timePeriod?.end ?? '');
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return timePeriod?.text ?? '';
+  }
+  return `${formatSingaporeTime(start)} to ${formatSingaporeTime(end)}`;
+}
+
+function formatSingaporeTime(date: Date): string {
+  const parts = Object.fromEntries(
+    singaporeTime.formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  return `${parts.hour} ${parts.dayPeriod?.toUpperCase()} ${parts.day} ${parts.month}`;
 }
 
 function numberOrNull(value: number | string | undefined): number | null {

@@ -76,6 +76,44 @@ function regionPayload(key: string, values: Record<string, number>) {
   };
 }
 
+const twentyFourHourPayload = {
+  code: 0,
+  data: {
+    records: [
+      {
+        updatedTimestamp: '2026-09-30T19:51:12+08:00',
+        general: { temperature: { low: 25, high: 34 } },
+        periods: [
+          {
+            // text deliberately disagrees with start/end, as seen in the live API
+            timePeriod: {
+              text: '6 pm 31 Oct to 6 am 01 Nov',
+              start: '2026-09-30T18:00:00+08:00',
+              end: '2026-10-01T06:00:00+08:00',
+            },
+            regions: {
+              central: { text: 'Cloudy' },
+              west: { text: 'Thundery Showers' },
+            },
+          },
+        ],
+      },
+    ],
+  },
+};
+
+const fourDayPayload = {
+  items: [
+    {
+      update_timestamp: '2026-09-30T17:11:23+08:00',
+      forecasts: [
+        { date: '2026-10-01', forecast: 'Afternoon thundery showers', temperature: { low: 25, high: 34 } },
+        { date: '2026-10-02', forecast: 'Fair and warm', temperature: { low: 26, high: 35 } },
+      ],
+    },
+  ],
+};
+
 function stubFetch(responses: Record<string, unknown>) {
   vi.stubGlobal(
     'fetch',
@@ -104,6 +142,8 @@ describe('SingaporeWeatherClient.getCurrentWeather', () => {
       uv: uvPayload,
       psi: regionPayload('psi_twenty_four_hourly', { central: 55, west: 70 }),
       pm25: regionPayload('pm25_one_hourly', { central: 12, west: 18 }),
+      'twenty-four-hr-forecast': twentyFourHourPayload,
+      '4-day-weather-forecast': fourDayPayload,
     });
 
     const snapshot = await new SingaporeWeatherClient().getCurrentWeather(1.351, 103.849);
@@ -121,6 +161,18 @@ describe('SingaporeWeatherClient.getCurrentWeather', () => {
       psi_twenty_four_hourly: 55,
       pm25_one_hourly: 12,
       air_quality_region: 'central',
+      forecast_low_c: 25,
+      forecast_high_c: 34,
+      forecast_periods: [{ label: '6 PM 30 Sep to 6 AM 1 Oct', forecast: 'Cloudy' }],
+      daily_forecast: [
+        {
+          date: '2026-10-01',
+          forecast: 'Afternoon thundery showers',
+          temperature_low_c: 25,
+          temperature_high_c: 34,
+        },
+        { date: '2026-10-02', forecast: 'Fair and warm', temperature_low_c: 26, temperature_high_c: 35 },
+      ],
     });
   });
 
@@ -143,7 +195,21 @@ describe('SingaporeWeatherClient.getCurrentWeather', () => {
       psi_twenty_four_hourly: null,
       pm25_one_hourly: null,
       air_quality_region: null,
+      forecast_low_c: null,
+      forecast_high_c: null,
+      forecast_periods: [],
+      daily_forecast: [],
     });
+  });
+
+  it('uses the nearest region for the 24-hour periods', async () => {
+    stubFetch({ 'twenty-four-hr-forecast': twentyFourHourPayload });
+
+    const snapshot = await new SingaporeWeatherClient().getCurrentWeather(1.36, 103.71);
+
+    expect(snapshot.forecast_periods).toEqual([
+      { label: '6 PM 30 Sep to 6 AM 1 Oct', forecast: 'Thundery Showers' },
+    ]);
   });
 
   it('keeps PM2.5 for the nearest region when PSI fails', async () => {
