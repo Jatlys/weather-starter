@@ -190,6 +190,7 @@ export class SingaporeWeatherClient {
       windSpeed,
       windDirection,
       uv,
+      airQuality,
     ] = await Promise.all([
       this.fetchLatestForecastPayload().catch(() => null),
       this.fetchNearestReading('air-temperature', latitude, longitude).catch(() => emptyReading),
@@ -198,6 +199,7 @@ export class SingaporeWeatherClient {
       this.fetchNearestReading('wind-speed', latitude, longitude).catch(() => emptyReading),
       this.fetchNearestReading('wind-direction', latitude, longitude).catch(() => emptyReading),
       this.fetchUvIndex().catch(() => emptyReading),
+      this.fetchAirQuality(latitude, longitude),
     ]);
 
     const snapshot = forecastPayload
@@ -214,6 +216,7 @@ export class SingaporeWeatherClient {
           windSpeed.timestamp,
           windDirection.timestamp,
           uv.timestamp,
+          airQuality.timestamp,
         ]) ||
         '',
       temperature_c: temperature.value,
@@ -222,6 +225,9 @@ export class SingaporeWeatherClient {
       wind_speed_knots: windSpeed.value,
       wind_direction_degrees: windDirection.value,
       uv_index: uv.value,
+      psi_twenty_four_hourly: airQuality.psi,
+      pm25_one_hourly: airQuality.pm25,
+      air_quality_region: airQuality.region,
     };
   }
 
@@ -295,29 +301,38 @@ export class SingaporeWeatherClient {
     timestamp: string | null;
   }> {
     const [psiPayload, pm25Payload] = await Promise.all([
-      this.fetchJson<PsiPayload>(`${this.apiBaseUrl()}/v2/real-time/api/psi`),
-      this.fetchJson<PsiPayload>(`${this.apiBaseUrl()}/v2/real-time/api/pm25`),
+      this.fetchAirQualityPayload('psi').catch((): PsiPayload => ({})),
+      this.fetchAirQualityPayload('pm25').catch((): PsiPayload => ({})),
     ]);
-    for (const payload of [psiPayload, pm25Payload]) {
-      if (payload.code !== undefined && payload.code !== 0) {
-        throw new WeatherProviderError(
-          payload.errorMsg ?? 'Weather provider returned an air quality error',
-        );
-      }
-    }
 
-    const region = nearestRegionName(psiPayload.data?.regionMetadata ?? [], latitude, longitude);
+    const regionMetadata =
+      psiPayload.data?.regionMetadata ?? pm25Payload.data?.regionMetadata ?? defaultRegions();
+    const region = nearestRegionName(regionMetadata, latitude, longitude);
     const psiItem = psiPayload.data?.items?.[0];
     const pm25Item = pm25Payload.data?.items?.[0];
+    const psi = valueForRegion(psiItem?.readings?.psi_twenty_four_hourly, region);
+    const pm25 = valueForRegion(pm25Item?.readings?.pm25_one_hourly, region);
     return {
-      psi: valueForRegion(psiItem?.readings?.psi_twenty_four_hourly, region),
-      pm25: valueForRegion(pm25Item?.readings?.pm25_one_hourly, region),
-      region,
+      psi,
+      pm25,
+      region: psi === null && pm25 === null ? null : region,
       timestamp: latestTimestamp([
         psiItem?.updatedTimestamp ?? psiItem?.timestamp ?? null,
         pm25Item?.updatedTimestamp ?? pm25Item?.timestamp ?? null,
       ]),
     };
+  }
+
+  async fetchAirQualityPayload(endpoint: 'psi' | 'pm25'): Promise<PsiPayload> {
+    const payload = await this.fetchJson<PsiPayload>(
+      `${this.apiBaseUrl()}/v2/real-time/api/${endpoint}`,
+    );
+    if (payload.code !== undefined && payload.code !== 0) {
+      throw new WeatherProviderError(
+        payload.errorMsg ?? `Weather provider returned an error for ${endpoint}`,
+      );
+    }
+    return payload;
   }
 
   async fetchTwentyFourHourForecast(

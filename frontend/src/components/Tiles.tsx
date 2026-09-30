@@ -94,7 +94,8 @@ export function AirQualityTile({ weather }: WeatherProps) {
         gradientClass="bg-gradient-to-r from-emerald-400 via-yellow-300 via-orange-400 to-red-500"
       />
       <p className="mt-3 text-xs leading-snug text-white/70">
-        PM2.5 {pm25} ug/m3 · {weather?.air_quality_region ?? 'nearest'} region
+        PM2.5 {pm25} ug/m3 ·{' '}
+        <span className="capitalize">{weather?.air_quality_region ?? 'nearest'}</span> region
       </p>
     </TileShell>
   );

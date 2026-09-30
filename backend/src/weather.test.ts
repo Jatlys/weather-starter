@@ -56,6 +56,26 @@ const uvPayload = {
   },
 };
 
+const regionMetadata = [
+  { name: 'central', labelLocation: { latitude: 1.35735, longitude: 103.82 } },
+  { name: 'west', labelLocation: { latitude: 1.35735, longitude: 103.7 } },
+];
+
+function regionPayload(key: string, values: Record<string, number>) {
+  return {
+    code: 0,
+    data: {
+      regionMetadata,
+      items: [
+        {
+          updatedTimestamp: '2026-09-30T09:30:00+08:00',
+          readings: { [key]: values },
+        },
+      ],
+    },
+  };
+}
+
 function stubFetch(responses: Record<string, unknown>) {
   vi.stubGlobal(
     'fetch',
@@ -82,6 +102,8 @@ describe('SingaporeWeatherClient.getCurrentWeather', () => {
       'wind-speed': readingPayload({ S1: 6.2, S2: 11 }),
       'wind-direction': readingPayload({ S1: 135, S2: 270 }),
       uv: uvPayload,
+      psi: regionPayload('psi_twenty_four_hourly', { central: 55, west: 70 }),
+      pm25: regionPayload('pm25_one_hourly', { central: 12, west: 18 }),
     });
 
     const snapshot = await new SingaporeWeatherClient().getCurrentWeather(1.351, 103.849);
@@ -96,6 +118,9 @@ describe('SingaporeWeatherClient.getCurrentWeather', () => {
       wind_speed_knots: 6.2,
       wind_direction_degrees: 135,
       uv_index: 3,
+      psi_twenty_four_hourly: 55,
+      pm25_one_hourly: 12,
+      air_quality_region: 'central',
     });
   });
 
@@ -115,6 +140,24 @@ describe('SingaporeWeatherClient.getCurrentWeather', () => {
       wind_speed_knots: null,
       wind_direction_degrees: null,
       uv_index: null,
+      psi_twenty_four_hourly: null,
+      pm25_one_hourly: null,
+      air_quality_region: null,
+    });
+  });
+
+  it('keeps PM2.5 for the nearest region when PSI fails', async () => {
+    stubFetch({
+      'two-hr-forecast': forecastPayload,
+      pm25: regionPayload('pm25_one_hourly', { central: 12, west: 18 }),
+    });
+
+    const snapshot = await new SingaporeWeatherClient().getCurrentWeather(1.36, 103.71);
+
+    expect(snapshot).toMatchObject({
+      psi_twenty_four_hourly: null,
+      pm25_one_hourly: 18,
+      air_quality_region: 'west',
     });
   });
 
