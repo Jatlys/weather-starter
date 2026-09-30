@@ -182,11 +182,22 @@ export class SingaporeWeatherClient {
 
   async getCurrentWeather(latitude: number, longitude: number): Promise<WeatherSnapshot> {
     const emptyReading = { value: null, timestamp: null };
-    const [forecastPayload, temperature, humidity, rainfall] = await Promise.all([
+    const [
+      forecastPayload,
+      temperature,
+      humidity,
+      rainfall,
+      windSpeed,
+      windDirection,
+      uv,
+    ] = await Promise.all([
       this.fetchLatestForecastPayload().catch(() => null),
       this.fetchNearestReading('air-temperature', latitude, longitude).catch(() => emptyReading),
       this.fetchNearestReading('relative-humidity', latitude, longitude).catch(() => emptyReading),
       this.fetchNearestReading('rainfall', latitude, longitude).catch(() => emptyReading),
+      this.fetchNearestReading('wind-speed', latitude, longitude).catch(() => emptyReading),
+      this.fetchNearestReading('wind-direction', latitude, longitude).catch(() => emptyReading),
+      this.fetchUvIndex().catch(() => emptyReading),
     ]);
 
     const snapshot = forecastPayload
@@ -196,11 +207,21 @@ export class SingaporeWeatherClient {
       ...snapshot,
       observed_at:
         snapshot.observed_at ||
-        latestTimestamp([temperature.timestamp, humidity.timestamp, rainfall.timestamp]) ||
+        latestTimestamp([
+          temperature.timestamp,
+          humidity.timestamp,
+          rainfall.timestamp,
+          windSpeed.timestamp,
+          windDirection.timestamp,
+          uv.timestamp,
+        ]) ||
         '',
       temperature_c: temperature.value,
       humidity_percent: humidity.value,
       rainfall_mm: rainfall.value,
+      wind_speed_knots: windSpeed.value,
+      wind_direction_degrees: windDirection.value,
+      uv_index: uv.value,
     };
   }
 

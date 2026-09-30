@@ -41,6 +41,21 @@ const forecastPayload = {
   },
 };
 
+const uvPayload = {
+  code: 0,
+  data: {
+    records: [
+      {
+        updatedTimestamp: '2026-09-30T10:05:00+08:00',
+        index: [
+          { hour: '2026-09-30T10:00:00+08:00', value: 3 },
+          { hour: '2026-09-30T09:00:00+08:00', value: 1 },
+        ],
+      },
+    ],
+  },
+};
+
 function stubFetch(responses: Record<string, unknown>) {
   vi.stubGlobal(
     'fetch',
@@ -64,6 +79,9 @@ describe('SingaporeWeatherClient.getCurrentWeather', () => {
       'air-temperature': readingPayload({ S1: 30.4, S2: 27.1 }),
       'relative-humidity': readingPayload({ S1: 72, S2: 90 }),
       rainfall: readingPayload({ S1: 0, S2: 2.4 }),
+      'wind-speed': readingPayload({ S1: 6.2, S2: 11 }),
+      'wind-direction': readingPayload({ S1: 135, S2: 270 }),
+      uv: uvPayload,
     });
 
     const snapshot = await new SingaporeWeatherClient().getCurrentWeather(1.351, 103.849);
@@ -75,10 +93,13 @@ describe('SingaporeWeatherClient.getCurrentWeather', () => {
       temperature_c: 30.4,
       humidity_percent: 72,
       rainfall_mm: 0,
+      wind_speed_knots: 6.2,
+      wind_direction_degrees: 135,
+      uv_index: 3,
     });
   });
 
-  it('keeps the forecast condition when a station reading fails', async () => {
+  it('keeps the forecast condition when metric readings fail', async () => {
     stubFetch({
       'two-hr-forecast': forecastPayload,
       'air-temperature': readingPayload({ S1: 30.4 }),
@@ -91,6 +112,9 @@ describe('SingaporeWeatherClient.getCurrentWeather', () => {
       temperature_c: 30.4,
       humidity_percent: null,
       rainfall_mm: null,
+      wind_speed_knots: null,
+      wind_direction_degrees: null,
+      uv_index: null,
     });
   });
 
